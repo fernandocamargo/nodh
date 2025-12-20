@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NODH Examples</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+        'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+        sans-serif;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+
+    button {
+      cursor: pointer;
+      transition: opacity 0.2s;
+    }
+
+    button:hover {
+      opacity: 0.8;
+    }
+
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <!--
+    To run this example:
+    1. Build the project: yarn prepublishOnly
+    2. Use a bundler like webpack, parcel, or vite to bundle the example
+    3. Or use create-react-app and import the Counter component
+
+    Example with parcel:
+    $ npm install -g parcel-bundler
+    $ parcel examples/index.html
+  -->
+  <script src="./App.Counter.js"></script>
+</body>
+</html>
