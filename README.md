@@ -26,6 +26,25 @@ The name reflects the philosophical perspective that managing state in complex a
 >
 > For more context on Redux's evolution, see the [official History of Redux](https://redux.js.org/understanding/history-and-design/history-of-redux).
 
+> [!WARNING]
+> **Technical Note: React-Redux Alpha Dependency**
+>
+> NODH specifically uses [`react-redux@7.1.0-alpha.5`](https://github.com/reduxjs/react-redux/releases/tag/v7.1.0-alpha.5) rather than the final 7.1.0 release. This alpha version was crucial for NODH's architecture because:
+>
+> **Key Features in v7.1.0-alpha.5:**
+> - **Hooks API Support**: First stable implementation of `useSelector`, `useDispatch`, and `useStore` hooks
+> - **Custom Context Support**: Ability to create custom hooks with [`createStoreHook`, `createDispatchHook`, and `createSelectorHook`](https://react-redux.js.org/api/hooks#custom-context) for multiple stores
+> - **Strict Equality Check**: Changed default equality comparison from shallow equality to strict `===` check, improving performance
+> - **Optional Comparison Function**: Added ability to pass custom equality functions as second argument to `useSelector`
+>
+> **Why the Alpha Version?**
+>
+> NODH's architecture relies on the ability to use **multiple Redux stores** with hooks, which requires custom context support. The alpha version provided the necessary hook creator functions that allowed NODH to create isolated store instances for different parts of the application - a pattern that was experimental at the time but essential for NODH's three-tier state design.
+>
+> The final v7.1.0 release (June 11, 2019) maintained these features, but NODH was developed against the alpha to be at the cutting edge of React-Redux hooks development during its creation in May 2019.
+>
+> **Modern Alternative**: Today, if building a similar system, you would use the stable `react-redux@^7.1.0` or later with the same custom context patterns, which have been [production-ready since v7.1.0](https://github.com/reduxjs/react-redux/releases/tag/v7.1.0).
+
 ## What is NODH?
 
 NODH is a Redux wrapper that abstracts away complex async action patterns, providing developers with a clean API for managing state in React applications. It handles the complexity of:
@@ -51,6 +70,9 @@ NODH requires the following peer dependencies:
 ```bash
 npm install react react-dom prop-types
 ```
+
+> [!TIP]
+> **Note on Dependencies**: NODH uses `react-redux@7.1.0-alpha.5` for its multiple stores support via custom context hooks. This alpha version provided the experimental hook creator functions (`createStoreHook`, `createDispatchHook`, `createSelectorHook`) that were crucial for NODH's architecture. See the [Technical Note](#about-the-name) section for details on why this specific version is used.
 
 ## Key Features
 
