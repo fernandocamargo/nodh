@@ -2,6 +2,30 @@
 
 A sophisticated React state management library built on top of Redux that simplifies handling asynchronous actions, automatic state lifecycle management, and action tracking with built-in logging.
 
+## About the Name
+
+<div align="center">
+  <img src="https://f4.bcbits.com/img/a0037309517_10.jpg" alt="No One Deserves Happiness album cover" width="300" />
+  <p><em>Album art from "No One Deserves Happiness" by The Body (2016)</em></p>
+</div>
+
+**NODH** stands for **"No One Deserves Happiness"**, named after [The Body's 2016 album](https://thebody.bandcamp.com/album/no-one-deserves-happiness). The album, released on March 18, 2016, is described as "the grossest pop album of all time" - a brutal blend of drone metal and 80s dance tracks that explores themes of despair and isolation.
+
+The name reflects the philosophical perspective that managing state in complex applications can be a challenging, sometimes brutal experience - but one that can be made more bearable with the right abstractions.
+
+> [!NOTE]
+> **Historical Context**: NODH was created and first published on **May 27, 2019**, nearly 5 months before [Redux Toolkit 1.0 was released](https://blog.isquaredsoftware.com/2019/10/redux-toolkit-1.0/) on **October 23, 2019**.
+>
+> At the time NODH was conceived, developers were struggling with Redux boilerplate without the official solution that would later become Redux Toolkit. NODH represents an independent approach to solving these pain points, predating the official Redux team's solution.
+>
+> **Timeline:**
+> - March 18, 2016: ["No One Deserves Happiness" album released](https://thebody.bandcamp.com/album/no-one-deserves-happiness)
+> - May 27, 2019: NODH v1.0.1 first published
+> - June 25, 2019: NODH v1.0.36 (last major update)
+> - October 23, 2019: [Redux Toolkit 1.0 released](https://blog.isquaredsoftware.com/2019/10/redux-toolkit-1.0/)
+>
+> For more context on Redux's evolution, see the [official History of Redux](https://redux.js.org/understanding/history-and-design/history-of-redux).
+
 ## What is NODH?
 
 NODH is a Redux wrapper that abstracts away complex async action patterns, providing developers with a clean API for managing state in React applications. It handles the complexity of:
@@ -426,6 +450,64 @@ NODH uses Jest for testing. Run the test suite:
 ```bash
 yarn test
 ```
+
+See [TESTING.md](./TESTING.md) for comprehensive testing documentation including integration tests and examples.
+
+## NODH vs Redux Toolkit
+
+> [!IMPORTANT]
+> **A Historical Perspective**
+>
+> NODH was created to solve real problems that developers faced with Redux in early 2019, before Redux Toolkit existed as an official solution.
+
+### Different Philosophies, Similar Goals
+
+While both NODH and Redux Toolkit aim to reduce Redux boilerplate, they take different approaches:
+
+#### NODH's Approach (May 2019)
+- **Hook-centric API**: Built around React hooks from the ground up (`useActions`, `useLog`)
+- **Three-tier state**: Explicit separation of persisted, session, and volatile state
+- **Built-in lifecycle**: Automatic `mount`/`unmount` action handling
+- **Action-level logging**: Every action execution is tracked with fingerprints and thread IDs
+- **Resource injection**: Actions receive pre-configured resources for state management
+- **Namespace isolation**: Components maintain isolated volatile state
+
+#### Redux Toolkit's Approach (October 2019)
+- **Slice-based**: Organizes code into "slices" with `createSlice()`
+- **Immer integration**: Built-in immutability via Immer (NODH also uses Immer)
+- **RTK Query**: Powerful data fetching layer (added later)
+- **Standard Redux**: Closer to traditional Redux patterns
+- **Broader ecosystem**: Official Redux solution with wider adoption
+
+### When to Choose What?
+
+**Choose NODH if:**
+- You want a hook-first approach to Redux
+- You need explicit state tier separation (persisted/session/volatile)
+- You want built-in action logging and debugging
+- You prefer automatic resource management and cleanup
+- You're working on a project where NODH's patterns already exist
+
+**Choose Redux Toolkit if:**
+- You want the official, widely-adopted solution
+- You need RTK Query for data fetching
+- You prefer slice-based organization
+- You want better TypeScript support out of the box
+- You're starting a new project and want community support
+
+> [!NOTE]
+> **NODH Today**: While Redux Toolkit has become the standard, NODH remains a working example of how developers independently solved Redux's pain points before an official solution existed. It showcases alternative patterns that may still be valuable in specific contexts.
+
+### Historical Significance
+
+NODH is part of the [history of Redux solutions](https://redux.js.org/understanding/history-and-design/history-of-redux) that emerged from the community:
+
+1. **2015-2018**: Redux + community libraries (redux-thunk, redux-saga, etc.)
+2. **Early 2019**: Independent solutions like NODH emerge
+3. **October 2019**: Redux Toolkit 1.0 becomes the official answer
+4. **2020+**: RTK Query adds data fetching, Redux Toolkit becomes standard
+
+NODH represents the creative solutions developers built when faced with Redux's complexity, before the official Redux team consolidated these patterns into Redux Toolkit.
 
 ## License
 
