@@ -1,4 +1,4 @@
-import replace from '.';
+import replace from './index';
 
 const create = () => ({
   a: () => 'a',

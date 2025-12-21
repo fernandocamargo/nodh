@@ -1,4 +1,4 @@
-import Cache from '.';
+import Cache from './index';
 
 test(`
   Should keep the reference until a change based on shallow comparison happens.

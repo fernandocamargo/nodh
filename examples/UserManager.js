@@ -48,37 +48,35 @@ export const userActions = {
    * Fetch user data from API
    * Demonstrates: async operation, takeLatest, error handling, loading state
    */
-  fetchUser: async ({ persisted, volatile, thread, helpers }, userId) => {
+  fetchUser: (userId) => async ({ persisted, volatile, thread, helpers }) => {
     // Set loading state
-    volatile.save({
-      path: ['loading'],
-      value: true,
-    });
+    volatile.save(state => ({
+      ...state,
+      loading: true,
+    }));
 
     try {
+      // Use global.mockAPI if available (for testing), otherwise use module mockAPI
+      const api = global.mockAPI || mockAPI;
+
       // Use takeLatest to prevent race conditions
       // If fetchUser is called again before this completes, this promise will be declined
       const user = await helpers.takeLatest(
-        mockAPI.fetchUser(userId)
+        api.fetchUser(userId)
       );
 
       // Save user to persisted state (will survive page refresh)
-      persisted.save({
-        path: ['user'],
-        value: user,
-      });
+      persisted.save(state => ({
+        ...state,
+        user,
+      }));
 
-      // Save to session state (only for current session)
-      volatile.save({
-        path: ['lastFetchTime'],
-        value: Date.now(),
-      });
-
-      // Clear loading state
-      volatile.save({
-        path: ['loading'],
-        value: false,
-      });
+      // Save to volatile state (only for current session)
+      volatile.save(state => ({
+        ...state,
+        lastFetchTime: Date.now(),
+        loading: false,
+      }));
 
       // Mark thread as successful
       thread.success(user);
@@ -89,15 +87,11 @@ export const userActions = {
       }
 
       // Save error state
-      volatile.save({
-        path: ['error'],
-        value: error.message,
-      });
-
-      volatile.save({
-        path: ['loading'],
-        value: false,
-      });
+      volatile.save(state => ({
+        ...state,
+        error: error.message,
+        loading: false,
+      }));
 
       // Mark thread as failed
       thread.fail(error);
@@ -108,51 +102,52 @@ export const userActions = {
    * Update user data
    * Demonstrates: optimistic updates, error rollback
    */
-  updateUser: async ({ persisted, volatile, thread }, userId, updates) => {
+  updateUser: (userId, updates) => async ({ persisted, volatile, thread }) => {
     // Save the current user for potential rollback
     const currentUser = persisted && persisted.user;
 
     // Optimistically update the UI
-    persisted.save({
-      path: ['user'],
-      value: { ...currentUser, ...updates },
-    });
+    persisted.save(state => ({
+      ...state,
+      user: { ...currentUser, ...updates },
+    }));
 
-    volatile.save({
-      path: ['saving'],
-      value: true,
-    });
+    volatile.save(state => ({
+      ...state,
+      saving: true,
+    }));
 
     try {
-      const updatedUser = await mockAPI.updateUser(userId, updates);
+      // Use global.mockAPI if available (for testing), otherwise use module mockAPI
+      const api = global.mockAPI || mockAPI;
+      const result = await api.updateUser(userId, updates);
 
-      persisted.save({
-        path: ['user'],
-        value: updatedUser,
-      });
+      // Merge API response with current user to handle partial responses
+      const updatedUser = { ...currentUser, ...result };
 
-      volatile.save({
-        path: ['saving'],
-        value: false,
-      });
+      persisted.save(state => ({
+        ...state,
+        user: updatedUser,
+      }));
+
+      volatile.save(state => ({
+        ...state,
+        saving: false,
+      }));
 
       thread.success(updatedUser);
     } catch (error) {
       // Rollback on error
-      persisted.save({
-        path: ['user'],
-        value: currentUser,
-      });
+      persisted.save(state => ({
+        ...state,
+        user: currentUser,
+      }));
 
-      volatile.save({
-        path: ['saving'],
-        value: false,
-      });
-
-      volatile.save({
-        path: ['error'],
-        value: error.message,
-      });
+      volatile.save(state => ({
+        ...state,
+        saving: false,
+        error: error.message,
+      }));
 
       thread.fail(error);
     }
@@ -162,37 +157,35 @@ export const userActions = {
    * Delete user
    * Demonstrates: clearing state
    */
-  deleteUser: async ({ persisted, volatile, thread }, userId) => {
-    volatile.save({
-      path: ['deleting'],
-      value: true,
-    });
+  deleteUser: (userId) => async ({ persisted, volatile, thread }) => {
+    volatile.save(state => ({
+      ...state,
+      deleting: true,
+    }));
 
     try {
-      await mockAPI.deleteUser(userId);
+      // Use global.mockAPI if available (for testing), otherwise use module mockAPI
+      const api = global.mockAPI || mockAPI;
+      await api.deleteUser(userId);
 
       // Clear user data
-      persisted.save({
-        path: ['user'],
-        value: null,
-      });
+      persisted.save(state => ({
+        ...state,
+        user: null,
+      }));
 
-      volatile.save({
-        path: ['deleting'],
-        value: false,
-      });
+      volatile.save(state => ({
+        ...state,
+        deleting: false,
+      }));
 
       thread.success();
     } catch (error) {
-      volatile.save({
-        path: ['deleting'],
-        value: false,
-      });
-
-      volatile.save({
-        path: ['error'],
-        value: error.message,
-      });
+      volatile.save(state => ({
+        ...state,
+        deleting: false,
+        error: error.message,
+      }));
 
       thread.fail(error);
     }
@@ -202,22 +195,24 @@ export const userActions = {
    * Clear error message
    * Demonstrates: simple state update
    */
-  clearError: ({ volatile }) => {
-    volatile.save({
-      path: ['error'],
-      value: null,
-    });
+  clearError: () => ({ volatile }) => {
+    volatile.save(state => ({
+      ...state,
+      error: null,
+    }));
   },
 
   /**
    * Increment view count
    * Demonstrates: session state usage
    */
-  incrementViewCount: ({ session }) => {
-    const currentCount = (session && session.viewCount) || 0;
-    session.save({
-      path: ['viewCount'],
-      value: currentCount + 1,
+  incrementViewCount: () => ({ session }) => {
+    session.save(state => {
+      const currentCount = (state && state.viewCount) || 0;
+      return {
+        ...state,
+        viewCount: currentCount + 1,
+      };
     });
   },
 
@@ -225,29 +220,25 @@ export const userActions = {
    * Mount lifecycle hook
    * Called when component mounts
    */
-  mount: ({ volatile, session }) => {
-    volatile.save({
-      path: ['mounted'],
-      value: true,
-    });
-
-    volatile.save({
-      path: ['mountedAt'],
-      value: Date.now(),
-    });
+  mount: () => ({ volatile, session }) => {
+    volatile.save(state => ({
+      ...state,
+      mounted: true,
+      mountedAt: Date.now(),
+    }));
 
     // Initialize session state
-    session.save({
-      path: ['viewCount'],
-      value: 0,
-    });
+    session.save(state => ({
+      ...state,
+      viewCount: 0,
+    }));
   },
 
   /**
    * Unmount lifecycle hook
    * Called when component unmounts
    */
-  unmount: ({ volatile }) => {
+  unmount: () => () => {
     // Cleanup logic here
     console.log('UserManager component unmounted');
   },

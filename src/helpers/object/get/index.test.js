@@ -1,4 +1,4 @@
-import get from '.';
+import get from './index';
 
 const create = () =>
   new Map().set(

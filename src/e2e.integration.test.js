@@ -14,39 +14,47 @@ describe('NODH End-to-End Integration Tests', () => {
     test('should handle a complete CRUD workflow', done => {
       // Define actions for a todo list
       const todoActions = {
-        addTodo: ({ persisted }, text) => {
-          const todos = (persisted && persisted.todos) || [];
-          const newTodo = { id: Date.now(), text, completed: false };
-          persisted.save({
-            path: ['todos'],
-            value: [...todos, newTodo],
+        addTodo: (text) => ({ persisted }) => {
+          persisted.save(state => {
+            const todos = (state && state.todos) || [];
+            const newTodo = { id: Date.now(), text, completed: false };
+            return {
+              ...state,
+              todos: [...todos, newTodo],
+            };
           });
         },
 
-        toggleTodo: ({ persisted }, id) => {
-          const todos = (persisted && persisted.todos) || [];
-          const updated = todos.map(todo =>
-            todo.id === id ? { ...todo, completed: !todo.completed } : todo
-          );
-          persisted.save({
-            path: ['todos'],
-            value: updated,
+        toggleTodo: (id) => ({ persisted }) => {
+          persisted.save(state => {
+            const todos = (state && state.todos) || [];
+            const updated = todos.map(todo =>
+              todo.id === id ? { ...todo, completed: !todo.completed } : todo
+            );
+            return {
+              ...state,
+              todos: updated,
+            };
           });
         },
 
-        deleteTodo: ({ persisted }, id) => {
-          const todos = (persisted && persisted.todos) || [];
-          persisted.save({
-            path: ['todos'],
-            value: todos.filter(todo => todo.id !== id),
+        deleteTodo: (id) => ({ persisted }) => {
+          persisted.save(state => {
+            const todos = (state && state.todos) || [];
+            return {
+              ...state,
+              todos: todos.filter(todo => todo.id !== id),
+            };
           });
         },
 
-        clearCompleted: ({ persisted }) => {
-          const todos = (persisted && persisted.todos) || [];
-          persisted.save({
-            path: ['todos'],
-            value: todos.filter(todo => !todo.completed),
+        clearCompleted: () => ({ persisted }) => {
+          persisted.save(state => {
+            const todos = (state && state.todos) || [];
+            return {
+              ...state,
+              todos: todos.filter(todo => !todo.completed),
+            };
           });
         },
       };
@@ -114,29 +122,23 @@ describe('NODH End-to-End Integration Tests', () => {
 
     test('should handle async operations with loading states', done => {
       const actions = {
-        fetchData: ({ volatile, persisted, thread, helpers }) => {
-          volatile.save({ path: ['loading'], value: true });
+        fetchData: () => async ({ volatile, persisted, thread }) => {
+          volatile.save(state => ({ ...state, loading: true }));
 
-          return helpers
-            .takeLatest(
-              new Promise(resolve => {
-                setTimeout(() => {
-                  resolve({ data: 'fetched data' });
-                }, 20);
-              })
-            )
-            .then(result => {
-              persisted.save({ path: ['data'], value: result.data });
-              volatile.save({ path: ['loading'], value: false });
-              thread.success(result);
-            })
-            .catch(error => {
-              if (!helpers.isDeclined(error)) {
-                volatile.save({ path: ['error'], value: error.message });
-                volatile.save({ path: ['loading'], value: false });
-                thread.fail(error);
-              }
+          try {
+            const result = await new Promise(resolve => {
+              setTimeout(() => {
+                resolve({ data: 'fetched data' });
+              }, 20);
             });
+
+            persisted.save(state => ({ ...state, data: result.data }));
+            volatile.save(state => ({ ...state, loading: false }));
+            thread.success(result);
+          } catch (error) {
+            volatile.save(state => ({ ...state, error: error.message, loading: false }));
+            thread.fail(error);
+          }
         },
       };
 
@@ -172,14 +174,14 @@ describe('NODH End-to-End Integration Tests', () => {
         setTimeout(() => {
           expect(currentState.loading).toBe(true);
 
-          // Wait for completion
+          // Wait for completion (promise resolves after 20ms + React update time)
           setTimeout(() => {
             expect(currentState.loading).toBe(false);
             expect(currentState.data).toBe('fetched data');
             expect(currentState.error).toBeUndefined();
 
             done();
-          }, 50);
+          }, 300);
         }, 10);
       }, 50);
     });
@@ -187,7 +189,7 @@ describe('NODH End-to-End Integration Tests', () => {
     test('should handle race conditions with takeLatest', done => {
       let resolveFunctions = [];
       const actions = {
-        fetchUser: ({ persisted, helpers }, userId) => {
+        fetchUser: (userId) => ({ persisted, helpers }) => {
           return helpers
             .takeLatest(
               new Promise(resolve => {
@@ -195,7 +197,7 @@ describe('NODH End-to-End Integration Tests', () => {
               })
             )
             .then(result => {
-              persisted.save({ path: ['user'], value: result });
+              persisted.save(state => ({ ...state, user: result }));
             })
             .catch(error => {
               if (helpers.isDeclined(error)) {
@@ -255,22 +257,24 @@ describe('NODH End-to-End Integration Tests', () => {
   describe('State Tier Interactions', () => {
     test('should demonstrate all three state tiers working together', done => {
       const actions = {
-        saveUser: ({ persisted }, user) => {
-          persisted.save({ path: ['user'], value: user });
+        saveUser: (user) => ({ persisted }) => {
+          persisted.save(state => ({ ...state, user }));
         },
 
-        incrementViewCount: ({ session }) => {
-          const count = (session && session.viewCount) || 0;
-          session.save({ path: ['viewCount'], value: count + 1 });
+        incrementViewCount: () => ({ session }) => {
+          session.save(state => {
+            const count = (state && state.viewCount) || 0;
+            return { ...state, viewCount: count + 1 };
+          });
         },
 
-        setLoading: ({ volatile }, isLoading) => {
-          volatile.save({ path: ['loading'], value: isLoading });
+        setLoading: (isLoading) => ({ volatile }) => {
+          volatile.save(state => ({ ...state, loading: isLoading }));
         },
 
-        mount: ({ volatile, session }) => {
-          volatile.save({ path: ['mounted'], value: true });
-          session.save({ path: ['viewCount'], value: 0 });
+        mount: () => ({ volatile, session }) => {
+          volatile.save(state => ({ ...state, mounted: true }));
+          session.save(state => ({ ...state, viewCount: 0 }));
         },
       };
 
@@ -301,6 +305,9 @@ describe('NODH End-to-End Integration Tests', () => {
       );
 
       setTimeout(() => {
+        // Mount component (volatile + session initialization)
+        currentActions.mount();
+
         // Persisted
         currentActions.saveUser({ id: 1, name: 'John' });
 
@@ -326,8 +333,8 @@ describe('NODH End-to-End Integration Tests', () => {
   describe('Multiple Components Sharing State', () => {
     test('should share persisted state across components', done => {
       const actions = {
-        setValue: ({ persisted }, value) => {
-          persisted.save({ path: ['shared'], value });
+        setValue: (value) => ({ persisted }) => {
+          persisted.save(state => ({ ...state, shared: value }));
         },
       };
 
@@ -381,8 +388,8 @@ describe('NODH End-to-End Integration Tests', () => {
 
     test('should isolate volatile state by namespace', done => {
       const actions = {
-        setVolatile: ({ volatile }, value) => {
-          volatile.save({ path: ['data'], value });
+        setVolatile: (value) => ({ volatile }) => {
+          volatile.save(state => ({ ...state, data: value }));
         },
       };
 
@@ -439,31 +446,24 @@ describe('NODH End-to-End Integration Tests', () => {
   describe('Error Handling Workflows', () => {
     test('should handle errors gracefully', done => {
       const actions = {
-        failingAction: ({ volatile, thread, helpers }) => {
-          volatile.save({ path: ['loading'], value: true });
+        failingAction: () => async ({ volatile, thread }) => {
+          volatile.save(state => ({ ...state, loading: true }));
 
-          return helpers
-            .takeLatest(
-              new Promise((resolve, reject) => {
-                setTimeout(() => {
-                  reject(new Error('Something went wrong'));
-                }, 20);
-              })
-            )
-            .then(() => {
-              volatile.save({ path: ['loading'], value: false });
-            })
-            .catch(error => {
-              if (!helpers.isDeclined(error)) {
-                volatile.save({ path: ['error'], value: error.message });
-                volatile.save({ path: ['loading'], value: false });
-                thread.fail(error);
-              }
+          try {
+            await new Promise((resolve, reject) => {
+              setTimeout(() => {
+                reject(new Error('Something went wrong'));
+              }, 20);
             });
+            volatile.save(state => ({ ...state, loading: false }));
+          } catch (error) {
+            volatile.save(state => ({ ...state, error: error.message, loading: false }));
+            thread.fail(error);
+          }
         },
 
-        clearError: ({ volatile }) => {
-          volatile.save({ path: ['error'], value: null });
+        clearError: () => ({ volatile }) => {
+          volatile.save(state => ({ ...state, error: null }));
         },
       };
 
@@ -506,7 +506,7 @@ describe('NODH End-to-End Integration Tests', () => {
 
             done();
           }, 50);
-        }, 50);
+        }, 300);
       }, 50);
     });
   });
@@ -514,11 +514,11 @@ describe('NODH End-to-End Integration Tests', () => {
   describe('Optimistic Updates', () => {
     test('should support optimistic updates with rollback', done => {
       const actions = {
-        updateWithOptimism: ({ persisted, volatile, helpers }, newValue) => {
+        updateWithOptimism: (newValue) => ({ persisted, volatile, helpers }) => {
           const original = persisted && persisted.value;
 
           // Optimistic update
-          persisted.save({ path: ['value'], value: newValue });
+          persisted.save(state => ({ ...state, value: newValue }));
 
           return helpers
             .takeLatest(
@@ -535,8 +535,8 @@ describe('NODH End-to-End Integration Tests', () => {
             .catch(error => {
               if (!helpers.isDeclined(error)) {
                 // Rollback on error
-                persisted.save({ path: ['value'], value: original });
-                volatile.save({ path: ['error'], value: error.message });
+                persisted.save(state => ({ ...state, value: original }));
+                volatile.save(state => ({ ...state, error: error.message }));
               }
             });
         },
@@ -581,13 +581,13 @@ describe('NODH End-to-End Integration Tests', () => {
             const optimisticValue = currentState.value;
             expect(optimisticValue).toBe('failed-update');
 
-            // Wait for rollback
+            // Wait for rollback (promise rejects after 20ms + React update time)
             setTimeout(() => {
               expect(currentState.value).toBe(initialValue);
               expect(currentState.error).toBe('Update failed');
 
               done();
-            }, 50);
+            }, 100);
           }, 10);
         }, 50);
       }, 50);
@@ -597,8 +597,8 @@ describe('NODH End-to-End Integration Tests', () => {
   describe('Log Integration', () => {
     test('should log action executions and retrieve with useLog', done => {
       const actions = {
-        loggedAction: ({ persisted }, value) => {
-          persisted.save({ path: ['value'], value });
+        loggedAction: (value) => ({ persisted }) => {
+          persisted.save(state => ({ ...state, value }));
         },
       };
 

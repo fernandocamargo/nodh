@@ -1,7 +1,7 @@
 import md5 from 'md5';
 import { v4 } from 'uuid';
 
-import { mount, unmount, set, start, finish, clear } from '.';
+import { mount, unmount, set, start, finish, clear } from './index';
 
 test('Mount.', () => {
   const current = undefined;

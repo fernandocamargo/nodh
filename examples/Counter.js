@@ -17,44 +17,50 @@ export const counterActions = {
    * Increment counter in persisted state
    * Demonstrates: persisted state update (survives page refresh)
    */
-  increment: ({ persisted }) => {
-    const currentCount = (persisted && persisted.count) || 0;
-    persisted.save({
-      path: ['count'],
-      value: currentCount + 1,
+  increment: () => ({ persisted }) => {
+    persisted.save(state => {
+      const currentCount = (state && state.count) || 0;
+      return {
+        ...state,
+        count: currentCount + 1,
+      };
     });
   },
 
   /**
    * Decrement counter in persisted state
    */
-  decrement: ({ persisted }) => {
-    const currentCount = (persisted && persisted.count) || 0;
-    persisted.save({
-      path: ['count'],
-      value: currentCount - 1,
+  decrement: () => ({ persisted }) => {
+    persisted.save(state => {
+      const currentCount = (state && state.count) || 0;
+      return {
+        ...state,
+        count: currentCount - 1,
+      };
     });
   },
 
   /**
    * Reset counter
    */
-  reset: ({ persisted }) => {
-    persisted.save({
-      path: ['count'],
-      value: 0,
-    });
+  reset: () => ({ persisted }) => {
+    persisted.save(state => ({
+      ...state,
+      count: 0,
+    }));
   },
 
   /**
    * Increment session counter
    * Demonstrates: session state (cleared on page refresh)
    */
-  incrementSession: ({ session }) => {
-    const currentCount = (session && session.sessionCount) || 0;
-    session.save({
-      path: ['sessionCount'],
-      value: currentCount + 1,
+  incrementSession: () => ({ session }) => {
+    session.save(state => {
+      const currentCount = (state && state.sessionCount) || 0;
+      return {
+        ...state,
+        sessionCount: currentCount + 1,
+      };
     });
   },
 
@@ -62,60 +68,56 @@ export const counterActions = {
    * Set loading state
    * Demonstrates: volatile state (cleared on unmount)
    */
-  setLoading: ({ volatile }, isLoading) => {
-    volatile.save({
-      path: ['loading'],
-      value: isLoading,
-    });
+  setLoading: (isLoading) => ({ volatile }) => {
+    volatile.save(state => ({
+      ...state,
+      loading: isLoading,
+    }));
   },
 
   /**
    * Set error message
    */
-  setError: ({ volatile }, message) => {
-    volatile.save({
-      path: ['error'],
-      value: message,
-    });
+  setError: (message) => ({ volatile }) => {
+    volatile.save(state => ({
+      ...state,
+      error: message,
+    }));
   },
 
   /**
    * Clear error message
    */
-  clearError: ({ volatile }) => {
-    volatile.save({
-      path: ['error'],
-      value: null,
-    });
+  clearError: () => ({ volatile }) => {
+    volatile.save(state => ({
+      ...state,
+      error: null,
+    }));
   },
 
   /**
    * Mount lifecycle hook
    * Called when component mounts
    */
-  mount: ({ volatile, session }) => {
-    volatile.save({
-      path: ['mounted'],
-      value: true,
-    });
-
-    volatile.save({
-      path: ['mountedAt'],
-      value: Date.now(),
-    });
+  mount: () => ({ volatile, session }) => {
+    volatile.save(state => ({
+      ...state,
+      mounted: true,
+      mountedAt: Date.now(),
+    }));
 
     // Initialize session state
-    session.save({
-      path: ['sessionCount'],
-      value: 0,
-    });
+    session.save(state => ({
+      ...state,
+      sessionCount: 0,
+    }));
   },
 
   /**
    * Unmount lifecycle hook
    * Called when component unmounts
    */
-  unmount: () => {
+  unmount: () => () => {
     console.log('Counter component unmounted');
   },
 };

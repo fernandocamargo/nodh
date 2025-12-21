@@ -121,7 +121,7 @@ import { useActions } from 'nodh';
 
 const actions = {
   // Async action with automatic state management
-  fetchUser: async ({ persisted, session, volatile, thread, helpers }, userId) => {
+  fetchUser: (userId) => async ({ persisted, session, volatile, thread, helpers }) => {
     try {
       // Use takeLatest to prevent race conditions
       const response = await helpers.takeLatest(
@@ -130,10 +130,8 @@ const actions = {
       const user = await response.json();
 
       // Save to persisted state (localStorage)
-      persisted.save({
-        path: ['user'],
-        value: user,
-      });
+      // The mutation function receives current state and returns new state
+      persisted.save(state => ({ ...state, user }));
 
       // Mark action as successful
       thread.success(user);
@@ -148,14 +146,12 @@ const actions = {
   },
 
   // Lifecycle hooks
-  mount: ({ volatile }) => {
-    volatile.save({
-      path: ['initialized'],
-      value: true,
-    });
+  mount: () => ({ volatile }) => {
+    // Initialize volatile state when component mounts
+    volatile.save(state => ({ ...state, initialized: true }));
   },
 
-  unmount: () => {
+  unmount: () => () => {
     // Cleanup logic here
   },
 };
@@ -202,51 +198,55 @@ import { Provider, useActions } from 'nodh';
 
 // Define actions
 const todoActions = {
-  addTodo: async ({ persisted }, text) => {
-    const todos = persisted?.todos || [];
-    const newTodo = {
-      id: Date.now(),
-      text,
-      completed: false,
-    };
-
-    persisted.save({
-      path: ['todos'],
-      value: [...todos, newTodo],
+  addTodo: (text) => ({ persisted }) => {
+    persisted.save(state => {
+      const todos = state?.todos || [];
+      const newTodo = {
+        id: Date.now(),
+        text,
+        completed: false,
+      };
+      return {
+        ...state,
+        todos: [...todos, newTodo],
+      };
     });
   },
 
-  toggleTodo: async ({ persisted }, id) => {
-    const todos = persisted?.todos || [];
-    const updated = todos.map(todo =>
-      todo.id === id ? { ...todo, completed: !todo.completed } : todo
-    );
-
-    persisted.save({
-      path: ['todos'],
-      value: updated,
+  toggleTodo: (id) => ({ persisted }) => {
+    persisted.save(state => {
+      const todos = state?.todos || [];
+      const updated = todos.map(todo =>
+        todo.id === id ? { ...todo, completed: !todo.completed } : todo
+      );
+      return {
+        ...state,
+        todos: updated,
+      };
     });
   },
 
-  removeTodo: async ({ persisted }, id) => {
-    const todos = persisted?.todos || [];
-    persisted.save({
-      path: ['todos'],
-      value: todos.filter(todo => todo.id !== id),
+  removeTodo: (id) => ({ persisted }) => {
+    persisted.save(state => {
+      const todos = state?.todos || [];
+      return {
+        ...state,
+        todos: todos.filter(todo => todo.id !== id),
+      };
     });
   },
 
-  fetchTodosFromAPI: async ({ persisted, thread, helpers }, userId) => {
+  fetchTodosFromAPI: (userId) => async ({ persisted, thread, helpers }) => {
     try {
       const response = await helpers.takeLatest(
         fetch(`/api/todos?userId=${userId}`)
       );
       const todos = await response.json();
 
-      persisted.save({
-        path: ['todos'],
-        value: todos,
-      });
+      persisted.save(state => ({
+        ...state,
+        todos,
+      }));
 
       thread.success(todos);
     } catch (error) {
@@ -256,11 +256,11 @@ const todoActions = {
     }
   },
 
-  mount: ({ volatile }) => {
-    volatile.save({
-      path: ['mountedAt'],
-      value: Date.now(),
-    });
+  mount: () => ({ volatile }) => {
+    volatile.save(state => ({
+      ...state,
+      mountedAt: Date.now(),
+    }));
   },
 };
 
@@ -394,18 +394,27 @@ Main hook for connecting components to NODH state and actions.
 
 ### Action Resources
 
-Actions receive a resources object as the first parameter:
+Actions are curried functions that receive user parameters first, then return a function that receives resources:
 
 ```javascript
+// Action signature
+actionName: (userParam1, userParam2, ...) => (resources) => {
+  // Action implementation
+}
+
+// Resources object structure
 {
   persisted: {
-    save: ({ path, value }) => void // Save to persisted state
+    save: (mutationFn) => void // Save to persisted state
+    // mutationFn: (currentState) => newState
   },
   session: {
-    save: ({ path, value }) => void // Save to session state
+    save: (mutationFn) => void // Save to session state
+    // mutationFn: (currentState) => newState
   },
   volatile: {
-    save: ({ path, value }) => void // Save to volatile state
+    save: (mutationFn) => void // Save to volatile state
+    // mutationFn: (currentState) => newState
   },
   thread: {
     success: (data) => void,        // Mark action as successful
@@ -416,6 +425,15 @@ Actions receive a resources object as the first parameter:
     isDeclined: (error) => Boolean     // Check if promise was declined
   }
 }
+
+// Example: Update persisted state
+persisted.save(state => ({ ...state, user: newUser }));
+
+// Example: Update nested property
+persisted.save(state => ({
+  ...state,
+  todos: [...state.todos, newTodo]
+}));
 ```
 
 ### `useLog(namespace, action)`
@@ -442,13 +460,15 @@ NODH uses a three-tier state structure:
 Use `helpers.takeLatest(promise)` to automatically cancel previous pending requests when a new one is made:
 
 ```javascript
-const fetchData = async ({ helpers }, id) => {
+const fetchData = (id) => async ({ helpers, persisted }) => {
   // If this is called again before the promise resolves,
   // the previous promise will be declined
   const data = await helpers.takeLatest(
     fetch(`/api/data/${id}`).then(r => r.json())
   );
-  // Use data...
+
+  // Save the fetched data
+  persisted.save(state => ({ ...state, data }));
 };
 ```
 

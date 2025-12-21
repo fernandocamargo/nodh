@@ -5,7 +5,7 @@ import { NODH } from 'constants/index';
 import { getInitialState } from 'reducers';
 import Provider from 'components/provider';
 
-import useSelector from '.';
+import useSelector from './index';
 
 const Mock = props => <Provider name={NODH} {...props} />;
 

@@ -7,7 +7,7 @@ export default ({ namespace, selector }) => () =>
     createSelector(
       ({ persisted }) => persisted,
       ({ session }) => session,
-      ({ volatile: { [namespace]: volatile = {} } }) => volatile,
+      ({ volatile: { [namespace]: volatile = {} } = {} }) => volatile,
       (persisted, session, volatile) =>
         selector({ persisted, session, volatile })
     )

@@ -12,7 +12,7 @@ const createMockHelpers = () => ({
   isDeclined: jest.fn(() => false),
 });
 
-// Mock resources
+// Mock resources - creates a properly linked state and resources object
 const createMockResources = () => {
   const state = {
     persisted: {},
@@ -20,37 +20,28 @@ const createMockResources = () => {
     volatile: {},
   };
 
-  return {
-    persisted: {
-      save: jest.fn(({ path, value }) => {
-        let current = state.persisted;
-        for (let i = 0; i < path.length - 1; i++) {
-          if (!current[path[i]]) current[path[i]] = {};
-          current = current[path[i]];
-        }
-        current[path[path.length - 1]] = value;
+  const resources = {
+    persisted: Object.assign(state.persisted, {
+      save: jest.fn((mutationFn) => {
+        // Apply the mutation function to update state
+        const newState = mutationFn(state.persisted);
+        Object.assign(state.persisted, newState);
       }),
-    },
-    session: {
-      save: jest.fn(({ path, value }) => {
-        let current = state.session;
-        for (let i = 0; i < path.length - 1; i++) {
-          if (!current[path[i]]) current[path[i]] = {};
-          current = current[path[i]];
-        }
-        current[path[path.length - 1]] = value;
+    }),
+    session: Object.assign(state.session, {
+      save: jest.fn((mutationFn) => {
+        // Apply the mutation function to update state
+        const newState = mutationFn(state.session);
+        Object.assign(state.session, newState);
       }),
-    },
-    volatile: {
-      save: jest.fn(({ path, value }) => {
-        let current = state.volatile;
-        for (let i = 0; i < path.length - 1; i++) {
-          if (!current[path[i]]) current[path[i]] = {};
-          current = current[path[i]];
-        }
-        current[path[path.length - 1]] = value;
+    }),
+    volatile: Object.assign(state.volatile, {
+      save: jest.fn((mutationFn) => {
+        // Apply the mutation function to update state
+        const newState = mutationFn(state.volatile);
+        Object.assign(state.volatile, newState);
       }),
-    },
+    }),
     thread: {
       success: jest.fn(),
       fail: jest.fn(),
@@ -58,38 +49,29 @@ const createMockResources = () => {
     helpers: createMockHelpers(),
     state,
   };
+
+  return resources;
 };
 
 describe('UserManager Actions', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    // Clear global.mockAPI to avoid test contamination
+    global.mockAPI = undefined;
   });
 
   describe('mount', () => {
     test('should initialize volatile and session state on mount', () => {
       const resources = createMockResources();
 
-      userActions.mount(resources);
+      userActions.mount()(resources);
 
-      // Check that mounted flag was set
-      expect(resources.volatile.save).toHaveBeenCalledWith({
-        path: ['mounted'],
-        value: true,
-      });
-
-      // Check that mountedAt timestamp was set
-      expect(resources.volatile.save).toHaveBeenCalledWith(
-        expect.objectContaining({
-          path: ['mountedAt'],
-          value: expect.any(Number),
-        })
-      );
-
-      // Check that viewCount was initialized
-      expect(resources.session.save).toHaveBeenCalledWith({
-        path: ['viewCount'],
-        value: 0,
-      });
+      // Check that state was updated correctly
+      expect(resources.volatile.save).toHaveBeenCalled();
+      expect(resources.session.save).toHaveBeenCalled();
+      expect(resources.state.volatile.mounted).toBe(true);
+      expect(resources.state.volatile.mountedAt).toEqual(expect.any(Number));
+      expect(resources.state.session.viewCount).toBe(0);
     });
   });
 
@@ -108,25 +90,18 @@ describe('UserManager Actions', () => {
       // Override takeLatest to return mock data
       resources.helpers.takeLatest.mockResolvedValue(mockUser);
 
-      await userActions.fetchUser(resources, userId);
+      await userActions.fetchUser(userId)(resources);
 
-      // Check loading was set to true
-      expect(resources.volatile.save).toHaveBeenCalledWith({
-        path: ['loading'],
-        value: true,
-      });
+      // Check loading was set to true and then false
+      expect(resources.volatile.save).toHaveBeenCalled();
+      expect(resources.state.volatile.loading).toBe(false);
 
       // Check user was saved to persisted state
-      expect(resources.persisted.save).toHaveBeenCalledWith({
-        path: ['user'],
-        value: mockUser,
-      });
+      expect(resources.persisted.save).toHaveBeenCalled();
+      expect(resources.state.persisted.user).toEqual(mockUser);
 
-      // Check loading was set to false
-      expect(resources.volatile.save).toHaveBeenCalledWith({
-        path: ['loading'],
-        value: false,
-      });
+      // Check lastFetchTime was saved
+      expect(resources.state.volatile.lastFetchTime).toEqual(expect.any(Number));
 
       // Check thread was marked as successful
       expect(resources.thread.success).toHaveBeenCalledWith(mockUser);
@@ -140,19 +115,13 @@ describe('UserManager Actions', () => {
       // Override takeLatest to reject with error
       resources.helpers.takeLatest.mockRejectedValue(error);
 
-      await userActions.fetchUser(resources, userId);
+      await userActions.fetchUser(userId)(resources);
 
       // Check error was saved
-      expect(resources.volatile.save).toHaveBeenCalledWith({
-        path: ['error'],
-        value: error.message,
-      });
+      expect(resources.state.volatile.error).toBe(error.message);
 
       // Check loading was set to false
-      expect(resources.volatile.save).toHaveBeenCalledWith({
-        path: ['loading'],
-        value: false,
-      });
+      expect(resources.state.volatile.loading).toBe(false);
 
       // Check thread was marked as failed
       expect(resources.thread.fail).toHaveBeenCalledWith(error);
@@ -167,7 +136,7 @@ describe('UserManager Actions', () => {
       resources.helpers.takeLatest.mockRejectedValue(error);
       resources.helpers.isDeclined.mockReturnValue(true);
 
-      await userActions.fetchUser(resources, userId);
+      await userActions.fetchUser(userId)(resources);
 
       // Thread should not be marked as failed for declined promises
       expect(resources.thread.fail).not.toHaveBeenCalled();
@@ -180,15 +149,10 @@ describe('UserManager Actions', () => {
 
       resources.helpers.takeLatest.mockResolvedValue(mockUser);
 
-      await userActions.fetchUser(resources, userId);
+      await userActions.fetchUser(userId)(resources);
 
       // Check that lastFetchTime was saved
-      expect(resources.volatile.save).toHaveBeenCalledWith(
-        expect.objectContaining({
-          path: ['lastFetchTime'],
-          value: expect.any(Number),
-        })
-      );
+      expect(resources.state.volatile.lastFetchTime).toEqual(expect.any(Number));
     });
   });
 
@@ -216,35 +180,24 @@ describe('UserManager Actions', () => {
       };
 
       // Start the update (don't await yet)
-      const actionPromise = userActions.updateUser(resources, userId, updates);
+      const actionPromise = userActions.updateUser(userId, updates)(resources);
 
       // Check optimistic update happened immediately
-      expect(resources.persisted.save).toHaveBeenCalledWith({
-        path: ['user'],
-        value: expect.objectContaining(updates),
-      });
+      expect(resources.persisted.save).toHaveBeenCalled();
+      expect(resources.state.persisted.user.name).toBe(updates.name);
 
       // Check saving flag was set
-      expect(resources.volatile.save).toHaveBeenCalledWith({
-        path: ['saving'],
-        value: true,
-      });
+      expect(resources.state.volatile.saving).toBe(true);
 
       // Resolve the API call
       resolveUpdate(updatedUser);
       await actionPromise;
 
       // Check final update was saved
-      expect(resources.persisted.save).toHaveBeenCalledWith({
-        path: ['user'],
-        value: updatedUser,
-      });
+      expect(resources.state.persisted.user).toEqual(updatedUser);
 
       // Check saving flag was cleared
-      expect(resources.volatile.save).toHaveBeenCalledWith({
-        path: ['saving'],
-        value: false,
-      });
+      expect(resources.state.volatile.saving).toBe(false);
 
       // Check thread was marked as successful
       expect(resources.thread.success).toHaveBeenCalledWith(updatedUser);
@@ -270,19 +223,16 @@ describe('UserManager Actions', () => {
         updateUser: jest.fn(() => Promise.reject(error)),
       };
 
-      await userActions.updateUser(resources, userId, updates);
+      await userActions.updateUser(userId, updates)(resources);
 
       // Check that user was rolled back to original
-      expect(resources.persisted.save).toHaveBeenCalledWith({
-        path: ['user'],
-        value: currentUser,
-      });
+      expect(resources.state.persisted.user).toEqual(currentUser);
 
       // Check error was saved
-      expect(resources.volatile.save).toHaveBeenCalledWith({
-        path: ['error'],
-        value: error.message,
-      });
+      expect(resources.state.volatile.error).toBe(error.message);
+
+      // Check saving flag was cleared
+      expect(resources.state.volatile.saving).toBe(false);
 
       // Check thread was marked as failed
       expect(resources.thread.fail).toHaveBeenCalledWith(error);
@@ -299,25 +249,15 @@ describe('UserManager Actions', () => {
         deleteUser: jest.fn(() => Promise.resolve({ success: true, id: userId })),
       };
 
-      await userActions.deleteUser(resources, userId);
+      await userActions.deleteUser(userId)(resources);
 
-      // Check deleting flag was set
-      expect(resources.volatile.save).toHaveBeenCalledWith({
-        path: ['deleting'],
-        value: true,
-      });
+      // Check deleting flag was set and then cleared
+      expect(resources.volatile.save).toHaveBeenCalled();
+      expect(resources.state.volatile.deleting).toBe(false);
 
       // Check user was cleared
-      expect(resources.persisted.save).toHaveBeenCalledWith({
-        path: ['user'],
-        value: null,
-      });
-
-      // Check deleting flag was cleared
-      expect(resources.volatile.save).toHaveBeenCalledWith({
-        path: ['deleting'],
-        value: false,
-      });
+      expect(resources.persisted.save).toHaveBeenCalled();
+      expect(resources.state.persisted.user).toBe(null);
 
       // Check thread was marked as successful
       expect(resources.thread.success).toHaveBeenCalled();
@@ -328,12 +268,10 @@ describe('UserManager Actions', () => {
     test('should clear error from volatile state', () => {
       const resources = createMockResources();
 
-      userActions.clearError(resources);
+      userActions.clearError()(resources);
 
-      expect(resources.volatile.save).toHaveBeenCalledWith({
-        path: ['error'],
-        value: null,
-      });
+      expect(resources.volatile.save).toHaveBeenCalled();
+      expect(resources.state.volatile.error).toBe(null);
     });
   });
 
@@ -341,24 +279,20 @@ describe('UserManager Actions', () => {
     test('should increment view count starting from 0', () => {
       const resources = createMockResources();
 
-      userActions.incrementViewCount(resources);
+      userActions.incrementViewCount()(resources);
 
-      expect(resources.session.save).toHaveBeenCalledWith({
-        path: ['viewCount'],
-        value: 1,
-      });
+      expect(resources.session.save).toHaveBeenCalled();
+      expect(resources.state.session.viewCount).toBe(1);
     });
 
     test('should increment existing view count', () => {
       const resources = createMockResources();
       resources.state.session.viewCount = 5;
 
-      userActions.incrementViewCount(resources);
+      userActions.incrementViewCount()(resources);
 
-      expect(resources.session.save).toHaveBeenCalledWith({
-        path: ['viewCount'],
-        value: 6,
-      });
+      expect(resources.session.save).toHaveBeenCalled();
+      expect(resources.state.session.viewCount).toBe(6);
     });
   });
 
@@ -367,7 +301,7 @@ describe('UserManager Actions', () => {
       const resources = createMockResources();
       const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
 
-      userActions.unmount(resources);
+      userActions.unmount()(resources);
 
       expect(consoleSpy).toHaveBeenCalledWith('UserManager component unmounted');
 
@@ -377,6 +311,12 @@ describe('UserManager Actions', () => {
 });
 
 describe('Action Integration Tests', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    // Clear global.mockAPI to avoid test contamination
+    global.mockAPI = undefined;
+  });
+
   test('should handle complete user fetch flow', async () => {
     const resources = createMockResources();
     const userId = 1;
@@ -389,13 +329,13 @@ describe('Action Integration Tests', () => {
     resources.helpers.takeLatest.mockResolvedValue(mockUser);
 
     // Mount component
-    userActions.mount(resources);
+    userActions.mount()(resources);
 
     // Fetch user
-    await userActions.fetchUser(resources, userId);
+    await userActions.fetchUser(userId)(resources);
 
     // Increment view count
-    userActions.incrementViewCount(resources);
+    userActions.incrementViewCount()(resources);
 
     // Verify final state
     expect(resources.state.persisted.user).toEqual(mockUser);
@@ -427,9 +367,9 @@ describe('Action Integration Tests', () => {
     });
 
     // Make multiple rapid calls
-    const promise1 = userActions.fetchUser(resources, 1);
-    const promise2 = userActions.fetchUser(resources, 2);
-    const promise3 = userActions.fetchUser(resources, 3);
+    const promise1 = userActions.fetchUser(1)(resources);
+    const promise2 = userActions.fetchUser(2)(resources);
+    const promise3 = userActions.fetchUser(3)(resources);
 
     await Promise.all([promise1, promise2, promise3]);
 

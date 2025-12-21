@@ -164,11 +164,12 @@ Optional `mount` and `unmount` actions for component lifecycle:
 
 ```javascript
 {
-  mount: ({ volatile }) => {
+  mount: () => ({ volatile }) => {
     // Initialize state when component mounts
+    volatile.save(state => ({ ...state, initialized: true }));
   },
 
-  unmount: () => {
+  unmount: () => () => {
     // Cleanup when component unmounts
   },
 
@@ -181,20 +182,20 @@ Optional `mount` and `unmount` actions for component lifecycle:
 ### 1. Async Action with Loading State
 
 ```javascript
-fetchData: async ({ persisted, volatile, thread, helpers }, id) => {
-  volatile.save({ path: ['loading'], value: true });
+fetchData: (id) => async ({ persisted, volatile, thread, helpers }) => {
+  volatile.save(state => ({ ...state, loading: true }));
 
   try {
     const data = await helpers.takeLatest(api.fetch(id));
-    persisted.save({ path: ['data'], value: data });
+    persisted.save(state => ({ ...state, data }));
     thread.success(data);
   } catch (error) {
     if (!helpers.isDeclined(error)) {
-      volatile.save({ path: ['error'], value: error.message });
+      volatile.save(state => ({ ...state, error: error.message }));
       thread.fail(error);
     }
   } finally {
-    volatile.save({ path: ['loading'], value: false });
+    volatile.save(state => ({ ...state, loading: false }));
   }
 }
 ```
@@ -202,19 +203,19 @@ fetchData: async ({ persisted, volatile, thread, helpers }, id) => {
 ### 2. Optimistic Update with Rollback
 
 ```javascript
-update: async ({ persisted, volatile }, id, changes) => {
+update: (id, changes) => async ({ persisted, volatile }) => {
   const original = persisted?.data;
 
   // Optimistically update
-  persisted.save({ path: ['data'], value: { ...original, ...changes } });
+  persisted.save(state => ({ ...state, data: { ...original, ...changes } }));
 
   try {
     const result = await api.update(id, changes);
-    persisted.save({ path: ['data'], value: result });
+    persisted.save(state => ({ ...state, data: result }));
   } catch (error) {
     // Rollback on failure
-    persisted.save({ path: ['data'], value: original });
-    volatile.save({ path: ['error'], value: error.message });
+    persisted.save(state => ({ ...state, data: original }));
+    volatile.save(state => ({ ...state, error: error.message }));
   }
 }
 ```
@@ -222,8 +223,8 @@ update: async ({ persisted, volatile }, id, changes) => {
 ### 3. Simple State Update
 
 ```javascript
-clearError: ({ volatile }) => {
-  volatile.save({ path: ['error'], value: null });
+clearError: () => ({ volatile }) => {
+  volatile.save(state => ({ ...state, error: null }));
 }
 ```
 

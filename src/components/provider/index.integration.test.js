@@ -122,9 +122,9 @@ describe('Provider Integration Tests', () => {
 
   describe('State Management', () => {
     test('should provide working state management', done => {
-      const actions = {
-        setValue: ({ persisted }, value) => {
-          persisted.save({ path: ['value'], value });
+      const actionDefinitions = {
+        setValue: (value) => ({ persisted }) => {
+          persisted.save(state => ({ ...state, value }));
         },
       };
 
@@ -135,7 +135,7 @@ describe('Provider Integration Tests', () => {
         const [state, actions] = useActions({
           namespace: 'test',
           selector: ({ persisted }) => ({ value: persisted && persisted.value }),
-          actions,
+          actions: actionDefinitions,
         });
 
         currentState = state;
