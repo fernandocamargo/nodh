@@ -110,57 +110,47 @@ yarn test integration.test.js --no-watch
 
 ### Total Test Stats
 - **Total test files**: 16
-- **Total tests**: 90+ tests
+- **Total tests**: 119 tests
+- **Pass rate**: 98.3% (117 passing, 2 failing)
 - **Lines of test code**: 2,400+ lines
+
+### Current Test Status
+
+#### ✅ Passing Test Suites (15/16)
+1. **Counter Example** - 17/17 tests passing
+2. **UserManager Example** - 14/14 tests passing
+3. **Provider Integration** - 15/15 tests passing
+4. **Mutations** - 6/6 tests passing
+5. **Volatile Actions** - 2/2 tests passing
+6. **Helper Tests** - 26/26 tests passing (all 6 helper suites)
+7. **Store Tests** - 3/3 tests passing
+8. **E2E Integration** - 7/9 tests passing
+
+#### ⚠️ Remaining Issues (1/16)
+**E2E Integration Tests** (2 failures):
+- "should handle async operations with loading states" - Edge case with async state updates
+- "should handle errors gracefully" - Edge case with async state updates
+
+These 2 tests represent edge cases in async promise callback state updates that require deeper investigation.
 
 ### Integration Test Breakdown
 
-#### useActions Hook Tests (16 tests)
-- ✅ Basic hook usage (2 tests)
-- ✅ State management (3 tests)
-- ✅ Three-tier state (5 tests)
-- ⏳ Lifecycle hooks (2 tests)
-- ⏳ Action execution (3 tests)
-- ⏳ Action resources (2 tests)
-- ⏳ Multiple namespaces (1 test)
+#### useActions Hook Tests
+- ✅ All tests passing after fixing action signatures
 
-**Status**: 5 passing, 11 need adjustment
+#### useLog Hook Tests
+- ✅ All tests passing
 
-#### useLog Hook Tests (12 tests)
-- Log retrieval
-- Parameter filtering
-- Log entry structure
-- Multiple executions
-- Log persistence
+#### Provider Component Tests
+- ✅ All 15 tests passing after fixing variable shadowing and action patterns
 
-**Status**: Ready to run
-
-#### Provider Component Tests (13 tests)
-- Basic setup
-- Configuration
-- State management
-- Multiple children
-- Error handling
-- Redux DevTools integration
-- Component lifecycle
-
-**Status**: Ready to run
-
-#### End-to-End Tests (11 tests)
-- Complete CRUD workflow
-- Async operations
-- Race conditions
-- State tier interactions
-- Component state sharing
-- Error handling
-- Optimistic updates
-- Log integration
-
-**Status**: Ready to run
+#### End-to-End Tests
+- ✅ 7/9 tests passing
+- ⚠️ 2 edge cases with async state updates in promise callbacks
 
 ### Example Tests
-- ✅ **Counter**: 17/17 tests passing (72.73% coverage)
-- ⏳ **UserManager**: 13 tests (requires async/await configuration)
+- ✅ **Counter**: 17/17 tests passing (100%)
+- ✅ **UserManager**: 14/14 tests passing (100%)
 
 ## What Gets Tested
 
@@ -207,6 +197,50 @@ yarn test integration.test.js --no-watch
    - Loading state management
    - Multi-component state sharing
 
+## Action Signature Pattern
+
+**IMPORTANT:** All NODH actions must follow the curried pattern:
+
+```javascript
+// ✅ CORRECT: Parameters first, then resources
+actionName: (param1, param2, ...) => ({ persisted, session, volatile, thread, helpers }) => {
+  // Action implementation
+}
+
+// ✅ CORRECT: Async actions
+actionName: (param1) => async ({ persisted, volatile, thread, helpers }) => {
+  // Async action implementation
+}
+
+// ✅ CORRECT: No parameters (still curried)
+mount: () => ({ volatile }) => {
+  volatile.save(state => ({ ...state, initialized: true }));
+}
+
+// ❌ WRONG: Resources first (old pattern - don't use!)
+actionName: ({ persisted }, param1) => {
+  // This will cause errors!
+}
+```
+
+**State Mutation Pattern:**
+
+All `save()` calls must use a mutation function:
+
+```javascript
+// ✅ CORRECT: Mutation function receives current state, returns new state
+persisted.save(state => ({ ...state, newField: value }));
+
+// ✅ CORRECT: Can safely handle undefined state
+session.save(state => {
+  const current = (state && state.count) || 0;
+  return { ...state, count: current + 1 };
+});
+
+// ❌ WRONG: Direct object (old pattern - don't use!)
+persisted.save({ path: ['field'], value: value });
+```
+
 ## Test Patterns and Examples
 
 ### Testing a Simple Action
@@ -215,8 +249,10 @@ yarn test integration.test.js --no-watch
 test('should update state', () => {
   const wrapper = createWrapper();
   const actions = {
-    setValue: ({ persisted }, value) => {
-      persisted.save({ path: ['value'], value });
+    // Correct pattern: params first, then resources
+    setValue: (value) => ({ persisted }) => {
+      // Use mutation function: receives current state, returns new state
+      persisted.save(state => ({ ...state, value }));
     },
   };
 
@@ -244,14 +280,26 @@ test('should update state', () => {
 ```javascript
 test('should handle async operations', async () => {
   const actions = {
-    fetchData: async ({ persisted, volatile, thread, helpers }) => {
-      volatile.save({ path: ['loading'], value: true });
+    // Correct pattern: curried with params first, async function with resources
+    fetchData: (id) => async ({ persisted, volatile, thread, helpers }) => {
+      // Set loading state using mutation function
+      volatile.save(state => ({ ...state, loading: true }));
 
-      const data = await helpers.takeLatest(fetch('/api/data'));
+      try {
+        // Use takeLatest to prevent race conditions
+        const data = await helpers.takeLatest(fetch(`/api/data/${id}`));
 
-      persisted.save({ path: ['data'], value: data });
-      volatile.save({ path: ['loading'], value: false });
-      thread.success(data);
+        // Update persisted state with mutation function
+        persisted.save(state => ({ ...state, data }));
+        volatile.save(state => ({ ...state, loading: false }));
+        thread.success(data);
+      } catch (error) {
+        // Check if error is from a declined promise (newer request cancelled this one)
+        if (!helpers.isDeclined(error)) {
+          volatile.save(state => ({ ...state, error: error.message, loading: false }));
+          thread.fail(error);
+        }
+      }
     },
   };
 
@@ -288,22 +336,50 @@ test('should work with Provider', () => {
 
 ## Testing Best Practices
 
-1. **Use createWrapper()** - Always wrap hooks in Redux Provider
-2. **Use act()** - Wrap state updates in `act()` for proper React testing
-3. **Use setTimeout()** - Allow time for async state updates to propagate
-4. **Test isolation** - Each test should use a unique namespace
-5. **Mock resources** - For unit tests, mock the resources object
-6. **Test all tiers** - Verify persisted, session, and volatile state separately
-7. **Test cleanup** - Verify resources are cleaned up on unmount
+1. **Use correct action signature** - Always use curried pattern: `(params) => ({ resources }) => { ... }`
+2. **Use mutation functions** - State updates must use: `state.save(s => ({ ...s, field: value }))`
+3. **Use createWrapper()** - Always wrap hooks in Redux Provider
+4. **Use act()** - Wrap state updates in `act()` for proper React testing
+5. **Use setTimeout()** - Allow time for async state updates to propagate
+6. **Test isolation** - Each test should use a unique namespace
+7. **Mock resources** - For unit tests, mock the resources object
+8. **Test all tiers** - Verify persisted, session, and volatile state separately
+9. **Test cleanup** - Verify resources are cleaned up on unmount
+10. **Use async/await** - Prefer async/await over .then()/.catch() for async actions
 
 ## Known Issues
 
-Some integration tests may need adjustment for:
-- Timing issues with async state updates
-- Redux state propagation delays
-- Component lifecycle timing
+### Remaining Test Failures (2/119)
 
-**Workaround**: Tests use `setTimeout()` to wait for state updates. Adjust timing if needed.
+Two E2E integration tests have edge cases with async state updates:
+
+1. **"should handle async operations with loading states"** (src/e2e.integration.test.js:180)
+   - **Issue**: `persisted.data` stays undefined after async save in promise callback
+   - **Symptom**: `volatile.loading` updates correctly, but `persisted.data` doesn't
+   - **Status**: Requires deeper investigation into async state update mechanism
+
+2. **"should handle errors gracefully"** (src/e2e.integration.test.js:509)
+   - **Issue**: `volatile.error` stays undefined after async save in promise callback
+   - **Symptom**: `volatile.loading` updates correctly in the same save call, but `error` field doesn't
+   - **Status**: Same underlying issue as #1
+
+### Working Patterns
+
+The following async patterns **do work correctly**:
+- ✅ Async actions using `async/await` with `helpers.takeLatest()` (UserManager example)
+- ✅ Synchronous state updates (Counter example, Todo CRUD)
+- ✅ Optimistic updates with rollback
+- ✅ Race condition handling with takeLatest
+
+### Investigation Notes
+
+- The issue appears specific to certain async promise callback scenarios
+- Increasing timeout values (100ms → 300ms) doesn't resolve the issue
+- Converting from `.then()/.catch()` to `async/await` doesn't resolve the issue
+- The `loading` state updates correctly, but other fields in the same state update don't
+- This may indicate a state batching or selector memoization edge case
+
+**Workaround**: Use patterns demonstrated in the working examples (Counter.js, UserManager.js) which have 100% passing tests.
 
 ## Coverage Goals
 
